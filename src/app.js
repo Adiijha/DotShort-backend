@@ -18,8 +18,8 @@ app.use(express.static('public'));
 app.use(cookieparser());
 app.options("*", cors(corsOptions));
 
-// import mainRouter from './routes/main.routes.js';
+import urlRouter from './routes/url.routes.js';
 
-// app.use('/api/v1/main', mainRouter);
+app.use('/', urlRouter);
 
 export {app};

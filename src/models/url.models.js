@@ -15,6 +15,9 @@ const urlSchema = new mongoose.Schema({
         type: String, 
         required: true 
     },
+    qrCode: { 
+        type: String, 
+    }
   });
 
 export const Url = mongoose.model("Url", urlSchema);

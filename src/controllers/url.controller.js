@@ -4,6 +4,7 @@ import { ApiResponse } from "../utils/ApiResponse.js";
 import { Url } from "../models/url.models.js";
 import dotenv from "dotenv";
 import crypto from "crypto";
+import QRCode from "qrcode";
 
 dotenv.config();
 
@@ -23,16 +24,19 @@ const shortenUrl = asyncHandler(async(req, res) => {
       // Generate a unique short code
       const hash = generateHash(longUrl);
 
+      
         // Truncate the hash to create the short code (first 8 characters)
         const shortCode = hash.substring(0, 8);
 
       const shortUrl = `${req.protocol}://${req.get("host")}/${shortCode}`;
+
+       const qrCode = await QRCode.toDataURL(shortUrl);
   
       // Save the mapping in the database
-      const newUrl = new Url({ longUrl, shortCode, shortUrl });
+      const newUrl = new Url({ longUrl, shortCode, shortUrl, qrCode });
       await newUrl.save();
   
-      res.json(new ApiResponse(200, "URL shortened successfully",{ shortUrl }));
+      res.json(new ApiResponse(200, "URL shortened successfully",{ shortUrl, qrCode }));
     } catch (error) {
       console.error("Error:", error);
         throw new ApiError(500, "Internal server error");

@@ -19,7 +19,9 @@ app.use(cookieparser());
 app.options("*", cors(corsOptions));
 
 import urlRouter from './routes/url.routes.js';
-
 app.use('/', urlRouter);
+
+import userRouter from './routes/user.routes.js';
+app.use('/user', userRouter);
 
 export {app};

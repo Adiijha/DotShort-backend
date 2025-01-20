@@ -28,7 +28,13 @@ const urlSchema = new mongoose.Schema({
     createdAt: { 
         type: Date, 
         default: Date.now 
-    }
+    },
+    user: { // Reference to the user who created the URL
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "User",
+    required: false,
+  },
+    
   });
 
   urlSchema.methods.comparePassword = async function (candidatePassword) {

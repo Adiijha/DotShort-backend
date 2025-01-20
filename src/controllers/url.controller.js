@@ -2,6 +2,7 @@ import { asyncHandler } from "../utils/asyncHandler.js";
 import { ApiError } from "../utils/ApiError.js";  
 import { ApiResponse } from "../utils/ApiResponse.js";
 import { Url } from "../models/url.models.js";
+import { User } from "../models/user.models.js";
 import dotenv from "dotenv";
 import crypto from "crypto";
 import QRCode from "qrcode";
@@ -24,7 +25,6 @@ const shortenUrl = asyncHandler(async (req, res) => {
   try {
     let finalShortCode;
 
-    // Handle custom short code if provided
     if (shortCode) {
       const existingUrl = await Url.findOne({ shortCode });
       if (existingUrl) {
@@ -32,43 +32,51 @@ const shortenUrl = asyncHandler(async (req, res) => {
       }
       finalShortCode = shortCode;
     } else {
-      // Generate a unique short code if not provided
       const hash = generateHash(longUrl);
       finalShortCode = hash.substring(0, 8);
 
-      // Ensure the short code is unique
       let existingUrl = await Url.findOne({ shortCode: finalShortCode });
       while (existingUrl) {
-        finalShortCode = generateHash(longUrl + Date.now()).substring(0, 8); // Append timestamp
+        finalShortCode = generateHash(longUrl + Date.now()).substring(0, 8);
         existingUrl = await Url.findOne({ shortCode: finalShortCode });
       }
     }
 
-    // Calculate expiration time if specified
     const expiresAt = expireInHours
       ? new Date(Date.now() + expireInHours * 60 * 60 * 1000)
       : null;
 
-    // Create the short URL and QR code
     const shortUrl = `${req.protocol}://${req.get("host")}/${finalShortCode}`;
     const qrCode = await QRCode.toDataURL(shortUrl);
 
-    // Hash the password if provided
     let hashedPassword = null;
     if (password) {
       hashedPassword = await bcrypt.hash(password, 10);
     }
 
-    // Save the URL mapping in the database
-    const newUrl = new Url({
+    const newUrlData = {
       longUrl,
       shortCode: finalShortCode,
       shortUrl,
       qrCode,
       password: hashedPassword,
       expiresAt,
-    });
+    };
+
+    if (req.user) {
+      newUrlData.user = req.user._id; // Associate with logged-in user
+    }
+
+    const newUrl = new Url(newUrlData);
     await newUrl.save();
+
+    if (req.user) {
+      await User.findByIdAndUpdate(
+        req.user._id,
+        { $push: { links: newUrl._id } },
+        { new: true }
+      );
+    }
 
     const responseMessage = password
       ? "Password-protected URL created successfully"
@@ -137,4 +145,62 @@ const validatePasswordAndRedirect = asyncHandler(async (req, res) => {
   );
 });
 
-export { shortenUrl, redirectToLongUrl, validatePasswordAndRedirect };
+const getUserLinks = asyncHandler(async (req, res) => {
+  const userId = req.user ? req.user._id : null;
+
+  if (!userId) {
+    return res
+      .status(401)
+      .json(new ApiResponse(401, "Unauthorized: Please log in to view your links"));
+  }
+
+  try {
+    console.log("Fetching user links for user ID:", userId); // Debugging log
+
+    // Fetch the logged-in user's links array
+    const user = await User.findById(userId).populate("links");
+
+    if (!user) {
+      console.error(`User with ID ${userId} not found`);
+      return res.status(404).json(new ApiResponse(404, "User not found"));
+    }
+
+    console.log("User found:", user);
+
+    if (!user.links || user.links.length === 0) {
+      console.error(`No links found for user with ID ${userId}`);
+      return res.status(404).json(
+        new ApiResponse(404, "No shortened URLs found for the user", [])
+      );
+    }
+
+    console.log("User links fetched successfully:", user.links);
+
+    // Return the user's links
+    res.status(200).json(
+      new ApiResponse(200, "User's shortened URLs fetched successfully", {
+        links: user.links,
+      })
+    );
+  } catch (error) {
+    console.error("Error fetching user links:", error.message); // Log the actual error
+    throw new ApiError(500, "Internal server error");
+  }
+});
+
+const deleteUrl = asyncHandler(async (req, res)=>{
+  const {shortCode} = req.params;
+  try{
+    const url = await Url.findOneAndDelete({shortCode});
+    if(!url){
+      throw new ApiError(404, "URL not found");
+    }
+    res.json(new ApiResponse(200, "URL deleted successfully"));
+  }
+  catch(error){
+    console.error("Error:", error);
+    throw new ApiError(500, "Internal server error");
+  }
+})
+
+export { shortenUrl, redirectToLongUrl, validatePasswordAndRedirect, getUserLinks, deleteUrl };

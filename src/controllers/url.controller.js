@@ -99,22 +99,31 @@ const shortenUrl = asyncHandler(async (req, res) => {
 
 // Endpoint to redirect a short URL to the original URL
 const redirectToLongUrl = asyncHandler(async (req, res) => {
-    const { shortCode } = req.params;
-  
-    try {
-      const url = await Url.findOne({ shortCode });
-  
-      if (url) {
-        return res.redirect(url.longUrl);
-      }
-  
-      throw new ApiError(404, "URL not found");
-    } catch (error) {
-      console.error("Error:", error);
-        throw new ApiError(500, "Internal server error");
-    }
-});
+  const { shortCode } = req.params;
 
+  try {
+    const url = await Url.findOne({ shortCode });
+
+    if (!url) {
+      throw new ApiError(404, "URL not found");
+    }
+
+    // Check if the URL has expired, only if `expiresAt` is set
+    if (url.expiresAt && url.expiresAt < Date.now()) {
+      throw new ApiError(410, "This URL has expired");
+    }
+
+    // Redirect to the original URL if valid
+    return res.redirect(url.longUrl);
+  } catch (error) {
+    console.error("Error:", error);
+    if (error instanceof ApiError) {
+      res.status(error.statusCode).json({ message: error.message });
+    } else {
+      res.status(500).json({ message: "Internal server error" });
+    }
+  }
+});
 
 const validatePasswordAndRedirect = asyncHandler(async (req, res) => {
   const { shortCode, password } = req.body;
